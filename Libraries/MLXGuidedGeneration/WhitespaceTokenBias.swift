@@ -54,6 +54,12 @@ public enum WhitespaceTokenBias {
     private static func isWhitespaceOnly(_ token: String) -> Bool {
         let bytes = tokenToBytes(token)
         guard !bytes.isEmpty else { return false }
+        // A lone single space is not a "whitespace run" token: byte-level BPE tokenizers (Qwen, GPT-2
+        // style) split digits one per token with no leading space merged in, so the only way to write
+        // "da 256" is the bare space token followed by "2". Penalizing it once the run tracker latches
+        // dropped every space before a number for the rest of the generation ("da256 GB", "del3%").
+        // Runs of whitespace use multi-space and newline tokens, which stay penalized.
+        if bytes == [0x20] { return false }
         return bytes.allSatisfy { whitespaceByteCodes.contains($0) }
     }
 
