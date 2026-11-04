@@ -100,12 +100,14 @@ public enum GuidedGenerationLoop {
         closingBias: MLXArray? = nil,
         whitespaceBias: MLXArray? = nil,
         whitespaceTokenIDs: Set<Int> = [],
+        penalties: GuidedPenalties = .none,
         diagnosticLog: Bool = false,
         prefill: PrefillParameters = .init(stepSize: PrefillParameters.defaultStepSize),
         emit: (String) -> Bool
     ) throws -> Int {
         let model = context.model
         let diagnosticSink = GuidedGenerationDiagnosticSink.current
+        var penalty = penalties.makeProcessor()
         let generationParameters = GenerateParameters(
             kvCache: kvCache,
             kvBits: kvBits,
@@ -276,7 +278,7 @@ public enum GuidedGenerationLoop {
                 }
             }
             let token = applyMaskAndSample(
-                logits: logits,
+                logits: penalized(logits, with: penalty),
                 maskArray: maskArray,
                 closingBias: activeBias
             )
@@ -317,6 +319,7 @@ public enum GuidedGenerationLoop {
             let commitResult = try constraint.commitToken(Int32(token))
 
             diagnosticSink?.recordSampledToken(tokenId)
+            penalty?.didSample(token: MLXArray(Int32(tokenId)))
             // Yield the sampled token
             detokenizer.append(token: tokenId)
             if let text = detokenizer.next() {

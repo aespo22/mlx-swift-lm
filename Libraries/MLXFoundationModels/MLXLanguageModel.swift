@@ -269,6 +269,10 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
     /// omitted.
     public let configurationResolver: any ModelConfigurationResolver
 
+    /// Repetition/presence penalties for the grammar-constrained (schema and tool-call) paths,
+    /// which otherwise decode greedily with no penalty. ``GuidedPenalties/none`` by default.
+    public let guidedPenalties: GuidedPenalties
+
     /// Configuration the framework uses to create and cache executors.
     public var executorConfiguration: Executor.Configuration {
         Executor.Configuration(modelID: modelID)
@@ -303,12 +307,14 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
         capabilities: [LanguageModelCapabilities.Capability] = [.guidedGeneration],
         configurationResolver: any ModelConfigurationResolver =
             DefaultConfigurationResolver(),
+        guidedPenalties: GuidedPenalties = .none,
         weightsLocation: @Sendable @escaping (String) -> URL,
         load: @escaping ContainerLoader
     ) {
         self.configuration = configuration
         self.capabilities = LanguageModelCapabilities(capabilities)
         self.configurationResolver = configurationResolver
+        self.guidedPenalties = guidedPenalties
         self.weightsLocation = weightsLocation
         self.load = load
     }
@@ -711,6 +717,7 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
             // reasoning config we route on.
             let declaresReasoning = model.capabilities.contains(.reasoning)
             let configurationResolver = model.configurationResolver
+            let guidedPenalties = model.guidedPenalties
             let labeledAttachments = TranscriptConverter.labeledAttachments(in: request.transcript)
 
             do {
@@ -959,6 +966,7 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
                                     schemaJSON: schemaJSON,
                                     input: input,
                                     modelID: modelID,
+                                    penalties: guidedPenalties,
                                     requestedMaxTokens: requestedMaxTokens,
                                     entryID: entryID,
                                     context: context,
@@ -1103,7 +1111,8 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
                                 hardReserve: hardReserve,
                                 closingBias: closingBias,
                                 whitespaceBias: whitespaceBias,
-                                whitespaceTokenIDs: whitespaceTokenIDs
+                                whitespaceTokenIDs: whitespaceTokenIDs,
+                                penalties: guidedPenalties
                             ) { text in
                                 outputBuffer += text
                                 GuidedGenerationDiagnosticSink.current?.recordEmit()
@@ -1148,6 +1157,7 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
                             schemaJSON: schemaJSON,
                             input: input,
                             modelID: modelID,
+                            penalties: guidedPenalties,
                             requestedMaxTokens: requestedMaxTokens,
                             entryID: entryID,
                             context: context,
@@ -1388,6 +1398,7 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
             schemaJSON: String,
             input: LMInput,
             modelID: String,
+            penalties: GuidedPenalties,
             requestedMaxTokens: Int?,
             entryID: String,
             context: ModelContext,
@@ -1437,7 +1448,8 @@ public struct MLXLanguageModel: FoundationModels.LanguageModel, Sendable {
                     hardReserve: hardReserve,
                     closingBias: bias.closing,
                     whitespaceBias: bias.whitespace,
-                    whitespaceTokenIDs: bias.whitespaceTokenIDs
+                    whitespaceTokenIDs: bias.whitespaceTokenIDs,
+                    penalties: penalties
                 ) { text in
                     textContinuation.yield(text)
                     GuidedGenerationDiagnosticSink.current?.recordEmit()
